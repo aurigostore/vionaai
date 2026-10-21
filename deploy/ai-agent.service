@@ -1,0 +1,16 @@
+[Unit]
+Description=AI Agent pribadi (Telegram)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=GANTI_USER
+WorkingDirectory=/opt/ai-agent
+ExecStart=/opt/ai-agent/.venv/bin/python bot.py
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

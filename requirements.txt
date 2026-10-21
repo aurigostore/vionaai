@@ -1,0 +1,5 @@
+anthropic>=1.17,<2
+python-telegram-bot[job-queue]>=22.0,<23
+python-dotenv>=1.0
+ddgs>=9.0
+tzdata
