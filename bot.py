@@ -30,6 +30,7 @@ from db import Database, now
 logging.basicConfig(format="%(asctime)s %(levelname)s %(name)s: %(message)s", level=logging.INFO)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpx2").setLevel(logging.WARNING)
+logging.getLogger("apscheduler").setLevel(logging.WARNING)
 log = logging.getLogger("bot")
 
 TELEGRAM_LIMIT = 4000
@@ -147,13 +148,32 @@ async def fire_reminder(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 def make_tool_ctx(app: Application, user_id: int, chat_id: int) -> tools.ToolContext:
+    loop = asyncio.get_running_loop()
     return tools.ToolContext(
         db=db,
         user_id=user_id,
         chat_id=chat_id,
         schedule_reminder=lambda r: schedule_reminder(app, r),
         unschedule_reminder=lambda rid: unschedule_reminder(app, rid),
+        send_backup=lambda: asyncio.run_coroutine_threadsafe(
+            send_backup(app.bot, chat_id), loop
+        ).result(timeout=120),
     )
+
+
+async def send_backup(bot, chat_id: int) -> None:
+    """Salin database ke file sementara lalu kirim ke chat Telegram."""
+    stamp = now().strftime("%Y-%m-%d_%H%M")
+    path = config.DB_PATH.parent / f"backup-{stamp}.db"
+    await asyncio.to_thread(db.backup_to, path)
+    try:
+        with path.open("rb") as f:
+            await bot.send_document(
+                chat_id, f, filename=f"viona-backup-{stamp}.db",
+                caption=f"🗄️ Backup data Viona ({stamp.replace('_', ' ')})\nSimpan file ini di tempat aman.",
+            )
+    finally:
+        path.unlink(missing_ok=True)
 
 
 # ---------------------------------------------------------------------------
@@ -255,6 +275,7 @@ Perintah:
 /profil - profil & kebutuhan kesehatan
 /pengingat - daftar pengingat aktif
 /reset - hapus riwayat obrolan (memori tetap)
+/backup - kirim file backup semua data ke chat ini
 /id - lihat ID Telegram kamu"""
 
 
@@ -333,6 +354,14 @@ async def cmd_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Riwayat obrolan dihapus. Memori jangka panjang tetap tersimpan 👍")
 
 
+async def cmd_backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        await send_backup(context.bot, update.effective_chat.id)
+    except Exception:
+        log.exception("Backup gagal")
+        await update.message.reply_text("⚠️ Backup gagal. Cek log server.")
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -362,6 +391,7 @@ def main() -> None:
     app.add_handler(CommandHandler("profil", cmd_profil, filters=owner))
     app.add_handler(CommandHandler("pengingat", cmd_pengingat, filters=owner))
     app.add_handler(CommandHandler("reset", cmd_reset, filters=owner))
+    app.add_handler(CommandHandler("backup", cmd_backup, filters=owner))
     app.add_handler(MessageHandler(owner & filters.TEXT & ~filters.COMMAND, on_text, block=False))
     app.add_handler(MessageHandler(owner & filters.PHOTO, on_photo, block=False))
     app.add_handler(MessageHandler(owner & filters.Document.ALL, on_document, block=False))

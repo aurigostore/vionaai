@@ -183,6 +183,14 @@ TOOLS: list[dict] = [
         },
     },
     {
+        "name": "kirim_backup",
+        "description": (
+            "Buat backup database (semua memori, profil & catatan kesehatan, pengingat, riwayat obrolan) "
+            "dan kirim filenya ke chat Telegram user. Pakai hanya bila user meminta backup."
+        ),
+        "input_schema": {"type": "object", "properties": {}, "additionalProperties": False},
+    },
+    {
         "name": "cari_internet",
         "description": "Cari informasi terbaru di internet (berita, harga, fakta terkini, referensi). Kembalikan judul, link, dan cuplikan.",
         "input_schema": {
@@ -219,6 +227,7 @@ class ToolContext:
     chat_id: int
     schedule_reminder: Callable[[dict], None]
     unschedule_reminder: Callable[[int], None]
+    send_backup: Callable[[], None] | None = None
 
 
 def _parse_local_dt(value: str) -> datetime:
@@ -334,6 +343,12 @@ def execute(name: str, args: dict[str, Any], ctx: ToolContext) -> str:
         if ok:
             ctx.unschedule_reminder(int(args["id"]))
         return json.dumps({"ok": ok})
+
+    if name == "kirim_backup":
+        if ctx.send_backup is None:
+            raise RuntimeError("Backup tidak tersedia di konteks ini")
+        ctx.send_backup()
+        return json.dumps({"ok": True, "info": "File backup sudah terkirim ke chat user"})
 
     if name == "cari_internet":
         return json.dumps(_web_search(args["kueri"], int(args.get("jumlah") or 5)), ensure_ascii=False)

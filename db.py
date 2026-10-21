@@ -82,6 +82,15 @@ class Database:
         with self.lock, self.conn:
             return self.conn.execute(sql, params)
 
+    def backup_to(self, dest: Path) -> None:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        target = sqlite3.connect(dest)
+        try:
+            with self.lock:
+                self.conn.backup(target)
+        finally:
+            target.close()
+
     # ---------- riwayat obrolan ----------
     def add_message(self, user_id: int, role: str, content: str) -> None:
         self._run(
